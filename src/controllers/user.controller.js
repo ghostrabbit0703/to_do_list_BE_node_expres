@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import bcrypt from 'bcrypt';
 import { pool } from '../db/connection.js';
 import { userDecorator } from '../decorators/user.decorator.js';
@@ -74,15 +75,16 @@ async function register(req, res, next) {
     }
 
     const hashedPassword = await bcrypt.hash(normalizedPassword, SALT_ROUNDS);
+    const id = randomUUID();
 
-    const [result] = await pool.query(
-      'INSERT INTO users (name, email, password) VALUES (?, ?, ?)',
-      [normalizedName, normalizedEmail, hashedPassword]
+    await pool.query(
+      'INSERT INTO users (id, name, email, password) VALUES (?, ?, ?, ?)',
+      [id, normalizedName, normalizedEmail, hashedPassword]
     );
 
     const [rows] = await pool.query(
       'SELECT id, name, email, created_at FROM users WHERE id = ?',
-      [result.insertId]
+      [id]
     );
 
     res.status(201).json({

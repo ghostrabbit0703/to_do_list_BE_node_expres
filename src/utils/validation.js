@@ -11,7 +11,3 @@ export const isValidName = (value, { min = 2, max = 100 } = {}) => {
   const trimmed = value.trim();
   return trimmed.length >= min && trimmed.length <= max;
 };
-
-export const isPositiveInteger = (value) => {
-  return Number.isInteger(Number(value)) && Number(value) > 0;
-};

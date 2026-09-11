@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { pool } from '../db/connection.js';
 import { categoryDecorator } from '../decorators/category.decorator.js';
-import { isValidUUID, isValidName, isPositiveInteger } from '../utils/validation.js';
+import { isValidUUID, isValidName } from '../utils/validation.js';
 
 async function index(req, res, next) {
   try {
@@ -62,15 +62,15 @@ async function store(req, res, next) {
       });
     }
 
-    if (!isPositiveInteger(user_id)) {
+    if (!isValidUUID(user_id)) {
       return res.status(400).json({
         success: false,
         error: 'Bad Request',
-        message: 'El user_id debe ser un número entero positivo'
+        message: 'El user_id debe ser un UUID válido'
       });
     }
 
-    const [userRows] = await pool.query('SELECT id FROM users WHERE id = ?', [Number(user_id)]);
+    const [userRows] = await pool.query('SELECT id FROM users WHERE id = ?', [user_id]);
     if (userRows.length === 0) {
       return res.status(400).json({
         success: false,
@@ -83,7 +83,7 @@ async function store(req, res, next) {
 
     const [existing] = await pool.query(
       'SELECT id FROM categories WHERE name = ? AND user_id = ? AND deleted_at IS NULL',
-      [normalizedName, Number(user_id)]
+      [normalizedName, user_id]
     );
 
     if (existing.length > 0) {
@@ -98,7 +98,7 @@ async function store(req, res, next) {
 
     await pool.query(
       'INSERT INTO categories (id, name, user_id) VALUES (?, ?, ?)',
-      [id, normalizedName, Number(user_id)]
+      [id, normalizedName, user_id]
     );
 
     const [rows] = await pool.query(
