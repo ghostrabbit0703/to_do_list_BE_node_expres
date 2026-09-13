@@ -2,15 +2,24 @@ import { randomUUID } from 'crypto';
 import { pool } from '../db/connection.js';
 import { tagDecorator } from '../decorators/tag.decorator.js';
 import { isValidUUID, isValidName } from '../utils/validation.js';
+import { getPaginationParams, buildPagination } from '../utils/pagination.js';
 
 async function index(req, res, next) {
   try {
+    const { page, perPage, offset } = getPaginationParams(req.query);
+
+    const [countRows] = await pool.query(
+      'SELECT COUNT(*) AS total FROM tags WHERE deleted_at IS NULL'
+    );
+
     const [rows] = await pool.query(
-      'SELECT id, name, user_id, created_at, updated_at FROM tags WHERE deleted_at IS NULL ORDER BY created_at DESC'
+      'SELECT id, name, user_id, created_at, updated_at FROM tags WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?',
+      [perPage, offset]
     );
 
     res.status(200).json({
-      tags: rows.map(tagDecorator)
+      data: rows.map(tagDecorator),
+      pagination: buildPagination({ page, perPage, total: countRows[0].total })
     });
   } catch (error) {
     next(error);
@@ -23,8 +32,6 @@ async function show(req, res, next) {
 
     if (!isValidUUID(id)) {
       return res.status(400).json({
-        success: false,
-        error: 'Bad Request',
         message: 'El id de la etiqueta no es un UUID válido'
       });
     }
@@ -36,8 +43,6 @@ async function show(req, res, next) {
 
     if (rows.length === 0) {
       return res.status(404).json({
-        success: false,
-        error: 'Not Found',
         message: 'La etiqueta no existe'
       });
     }
@@ -56,16 +61,12 @@ async function store(req, res, next) {
 
     if (!isValidName(name, { min: 1, max: 100 })) {
       return res.status(400).json({
-        success: false,
-        error: 'Bad Request',
         message: 'El nombre debe tener entre 1 y 100 caracteres'
       });
     }
 
     if (!isValidUUID(user_id)) {
       return res.status(400).json({
-        success: false,
-        error: 'Bad Request',
         message: 'El user_id debe ser un UUID válido'
       });
     }
@@ -73,8 +74,6 @@ async function store(req, res, next) {
     const [userRows] = await pool.query('SELECT id FROM users WHERE id = ?', [user_id]);
     if (userRows.length === 0) {
       return res.status(400).json({
-        success: false,
-        error: 'Bad Request',
         message: 'El usuario indicado no existe'
       });
     }
@@ -88,8 +87,6 @@ async function store(req, res, next) {
 
     if (existing.length > 0) {
       return res.status(409).json({
-        success: false,
-        error: 'Conflict',
         message: 'Ya existe una etiqueta con ese nombre'
       });
     }
@@ -121,16 +118,12 @@ async function update(req, res, next) {
 
     if (!isValidUUID(id)) {
       return res.status(400).json({
-        success: false,
-        error: 'Bad Request',
         message: 'El id de la etiqueta no es un UUID válido'
       });
     }
 
     if (!isValidName(name, { min: 1, max: 100 })) {
       return res.status(400).json({
-        success: false,
-        error: 'Bad Request',
         message: 'El nombre debe tener entre 1 y 100 caracteres'
       });
     }
@@ -142,8 +135,6 @@ async function update(req, res, next) {
 
     if (result.affectedRows === 0) {
       return res.status(404).json({
-        success: false,
-        error: 'Not Found',
         message: 'La etiqueta no existe'
       });
     }
@@ -167,8 +158,6 @@ async function destroy(req, res, next) {
 
     if (!isValidUUID(id)) {
       return res.status(400).json({
-        success: false,
-        error: 'Bad Request',
         message: 'El id de la etiqueta no es un UUID válido'
       });
     }
@@ -180,8 +169,6 @@ async function destroy(req, res, next) {
 
     if (result.affectedRows === 0) {
       return res.status(404).json({
-        success: false,
-        error: 'Not Found',
         message: 'La etiqueta no existe'
       });
     }

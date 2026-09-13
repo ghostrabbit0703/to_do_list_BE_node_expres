@@ -13,8 +13,6 @@ async function register(req, res, next) {
 
     if (!name || !email || !password) {
       return res.status(400).json({
-        success: false,
-        error: 'Bad Request',
         message: 'Los campos name, email y password son obligatorios'
       });
     }
@@ -22,8 +20,6 @@ async function register(req, res, next) {
     const normalizedName = String(name).trim();
     if (normalizedName.length < 2 || normalizedName.length > 100) {
       return res.status(400).json({
-        success: false,
-        error: 'Bad Request',
         message: 'El nombre debe tener entre 2 y 100 caracteres'
       });
     }
@@ -32,8 +28,6 @@ async function register(req, res, next) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(normalizedEmail)) {
       return res.status(400).json({
-        success: false,
-        error: 'Bad Request',
         message: 'El formato del email no es válido'
       });
     }
@@ -54,8 +48,6 @@ async function register(req, res, next) {
       !hasSymbol
     ) {
       return res.status(400).json({
-        success: false,
-        error: 'Bad Request',
         message:
           'La contraseña debe tener entre 8 y 72 bytes e incluir al menos una mayúscula, una minúscula, un número y un símbolo'
       });
@@ -68,8 +60,6 @@ async function register(req, res, next) {
 
     if (existing.length > 0) {
       return res.status(409).json({
-        success: false,
-        error: 'Conflict',
         message: 'Ya existe un usuario con ese email'
       });
     }
