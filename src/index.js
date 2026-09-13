@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import userRouter from './routes/user.routes.js';
 
 const app = express();
 
@@ -13,6 +14,8 @@ app.get('/ping', (req, res) => {
         message: 'pong'
     });
 });
+
+app.use('/api/auth', userRouter);
 
 app.use((req, res) => {
     res.status(404).json({
