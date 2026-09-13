@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import userRouter from './routes/user.routes.js';
 import categoryRouter from './routes/category.routes.js';
+import tagRouter from './routes/tag.routes.js';
 
 const app = express();
 
@@ -18,6 +19,7 @@ app.get('/ping', (req, res) => {
 
 app.use('/api/auth', userRouter);
 app.use('/api/categories', categoryRouter);
+app.use('/api/tags', tagRouter);
 
 app.use((req, res) => {
     res.status(404).json({
