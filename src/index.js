@@ -21,8 +21,6 @@ app.use('/api/categories', categoryRouter);
 
 app.use((req, res) => {
     res.status(404).json({
-        success: false,
-        error: 'Not Found',
         message: `La ruta ${req.method} ${req.originalUrl} no existe`
     });
 });
@@ -31,8 +29,6 @@ app.use((err, req, res, next) => {
     console.error(err);
 
     res.status(500).json({
-        success: false,
-        error: 'Internal Server Error',
         message: 'Algo salió mal en el servidor'
     });
 });
