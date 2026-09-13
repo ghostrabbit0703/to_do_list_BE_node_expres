@@ -9,12 +9,13 @@ async function index(req, res, next) {
     const { page, perPage, offset } = getPaginationParams(req.query);
 
     const [countRows] = await pool.query(
-      'SELECT COUNT(*) AS total FROM tags WHERE deleted_at IS NULL'
+      'SELECT COUNT(*) AS total FROM tags WHERE user_id = ? AND deleted_at IS NULL',
+      [req.user.id]
     );
 
     const [rows] = await pool.query(
-      'SELECT id, name, user_id, created_at, updated_at FROM tags WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?',
-      [perPage, offset]
+      'SELECT id, name, user_id, created_at, updated_at FROM tags WHERE user_id = ? AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?',
+      [req.user.id, perPage, offset]
     );
 
     res.status(200).json({
@@ -37,8 +38,8 @@ async function show(req, res, next) {
     }
 
     const [rows] = await pool.query(
-      'SELECT id, name, user_id, created_at, updated_at FROM tags WHERE id = ? AND deleted_at IS NULL',
-      [id]
+      'SELECT id, name, user_id, created_at, updated_at FROM tags WHERE id = ? AND user_id = ? AND deleted_at IS NULL',
+      [id, req.user.id]
     );
 
     if (rows.length === 0) {
@@ -57,7 +58,7 @@ async function show(req, res, next) {
 
 async function store(req, res, next) {
   try {
-    const { name, user_id } = req.body || {};
+    const { name } = req.body || {};
 
     if (!isValidName(name, { min: 1, max: 100 })) {
       return res.status(400).json({
@@ -65,24 +66,12 @@ async function store(req, res, next) {
       });
     }
 
-    if (!isValidUUID(user_id)) {
-      return res.status(400).json({
-        message: 'El user_id debe ser un UUID válido'
-      });
-    }
-
-    const [userRows] = await pool.query('SELECT id FROM users WHERE id = ?', [user_id]);
-    if (userRows.length === 0) {
-      return res.status(400).json({
-        message: 'El usuario indicado no existe'
-      });
-    }
-
+    const userId = req.user.id;
     const normalizedName = String(name).trim();
 
     const [existing] = await pool.query(
       'SELECT id FROM tags WHERE name = ? AND user_id = ? AND deleted_at IS NULL',
-      [normalizedName, user_id]
+      [normalizedName, userId]
     );
 
     if (existing.length > 0) {
@@ -95,7 +84,7 @@ async function store(req, res, next) {
 
     await pool.query(
       'INSERT INTO tags (id, name, user_id) VALUES (?, ?, ?)',
-      [id, normalizedName, user_id]
+      [id, normalizedName, userId]
     );
 
     const [rows] = await pool.query(
@@ -129,8 +118,8 @@ async function update(req, res, next) {
     }
 
     const [result] = await pool.query(
-      'UPDATE tags SET name = ? WHERE id = ? AND deleted_at IS NULL',
-      [String(name).trim(), id]
+      'UPDATE tags SET name = ? WHERE id = ? AND user_id = ? AND deleted_at IS NULL',
+      [String(name).trim(), id, req.user.id]
     );
 
     if (result.affectedRows === 0) {
@@ -163,8 +152,8 @@ async function destroy(req, res, next) {
     }
 
     const [result] = await pool.query(
-      'UPDATE tags SET deleted_at = NOW() WHERE id = ? AND deleted_at IS NULL',
-      [id]
+      'UPDATE tags SET deleted_at = NOW() WHERE id = ? AND user_id = ? AND deleted_at IS NULL',
+      [id, req.user.id]
     );
 
     if (result.affectedRows === 0) {

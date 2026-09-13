@@ -20,10 +20,10 @@ function resolveStatus({ status, completed }) {
   return 'pending';
 }
 
-async function fetchTask(taskId) {
+async function fetchTask(taskId, userId) {
   const [rows] = await pool.query(
-    'SELECT id, title, description, status, category_id, user_id, created_at, updated_at FROM tasks WHERE id = ? AND deleted_at IS NULL',
-    [taskId]
+    'SELECT id, title, description, status, category_id, user_id, created_at, updated_at FROM tasks WHERE id = ? AND user_id = ? AND deleted_at IS NULL',
+    [taskId, userId]
   );
 
   if (rows.length === 0) return null;
@@ -55,7 +55,8 @@ async function index(req, res, next) {
     const { page, perPage, offset } = getPaginationParams(req.query);
 
     const [countRows] = await pool.query(
-      'SELECT COUNT(*) AS total FROM tasks WHERE deleted_at IS NULL'
+      'SELECT COUNT(*) AS total FROM tasks WHERE user_id = ? AND deleted_at IS NULL',
+      [req.user.id]
     );
 
     const [rows] = await pool.query(
@@ -63,10 +64,10 @@ async function index(req, res, next) {
               c.name AS category_name
        FROM tasks t
        JOIN categories c ON c.id = t.category_id AND c.deleted_at IS NULL
-       WHERE t.deleted_at IS NULL
+       WHERE t.user_id = ? AND t.deleted_at IS NULL
        ORDER BY t.created_at DESC
        LIMIT ? OFFSET ?`,
-      [perPage, offset]
+      [req.user.id, perPage, offset]
     );
 
     const tagsByTask = new Map();
@@ -126,7 +127,7 @@ async function show(req, res, next) {
       });
     }
 
-    const task = await fetchTask(id);
+    const task = await fetchTask(id, req.user.id);
 
     if (!task) {
       return res.status(404).json({
@@ -144,7 +145,7 @@ async function show(req, res, next) {
 
 async function store(req, res, next) {
   try {
-    const { title, description, category_id, user_id, status, completed, tags } = req.body || {};
+    const { title, description, category_id, status, completed, tags } = req.body || {};
 
     if (!isValidName(title, { min: TITLE_MIN_LENGTH, max: TITLE_MAX_LENGTH })) {
       return res.status(400).json({
@@ -161,11 +162,7 @@ async function store(req, res, next) {
       });
     }
 
-    if (!isValidUUID(user_id)) {
-      return res.status(400).json({
-        message: 'El user_id debe ser un UUID válido'
-      });
-    }
+    const userId = req.user.id;
 
     if (!isValidUUID(category_id)) {
       return res.status(400).json({
@@ -173,16 +170,9 @@ async function store(req, res, next) {
       });
     }
 
-    const [userRows] = await pool.query('SELECT id FROM users WHERE id = ?', [user_id]);
-    if (userRows.length === 0) {
-      return res.status(400).json({
-        message: 'El usuario indicado no existe'
-      });
-    }
-
     const [categoryRows] = await pool.query(
       'SELECT id FROM categories WHERE id = ? AND user_id = ? AND deleted_at IS NULL',
-      [category_id, user_id]
+      [category_id, userId]
     );
     if (categoryRows.length === 0) {
       return res.status(400).json({
@@ -210,7 +200,7 @@ async function store(req, res, next) {
 
       const [existingTags] = await pool.query(
         `SELECT id FROM tags WHERE id IN (${placeholders}) AND user_id = ? AND deleted_at IS NULL`,
-        [...tagIds, user_id]
+        [...tagIds, userId]
       );
 
       if (existingTags.length !== tagIds.length) {
@@ -224,7 +214,7 @@ async function store(req, res, next) {
 
     await pool.query(
       'INSERT INTO tasks (id, title, description, status, category_id, user_id) VALUES (?, ?, ?, ?, ?, ?)',
-      [id, String(title).trim(), normalizedDescription || null, statusValue, category_id, user_id]
+      [id, String(title).trim(), normalizedDescription || null, statusValue, category_id, userId]
     );
 
     if (tagIds.length > 0) {
@@ -232,7 +222,7 @@ async function store(req, res, next) {
       await pool.query('INSERT INTO tags_task (tag_id, task_id) VALUES ?', [values]);
     }
 
-    const task = await fetchTask(id);
+    const task = await fetchTask(id, userId);
 
     res.status(201).json({
       task
@@ -245,7 +235,7 @@ async function store(req, res, next) {
 async function update(req, res, next) {
   try {
     const { id } = req.params;
-    const { title, description, category_id, user_id, status, completed, tags } = req.body || {};
+    const { title, description, category_id, status, completed, tags } = req.body || {};
 
     if (!isValidUUID(id)) {
       return res.status(400).json({
@@ -253,24 +243,16 @@ async function update(req, res, next) {
       });
     }
 
+    const userId = req.user.id;
+
     const [existingRows] = await pool.query(
-      'SELECT id, user_id FROM tasks WHERE id = ? AND deleted_at IS NULL',
-      [id]
+      'SELECT id FROM tasks WHERE id = ? AND user_id = ? AND deleted_at IS NULL',
+      [id, userId]
     );
 
     if (existingRows.length === 0) {
       return res.status(404).json({
         message: 'La tarea no existe'
-      });
-    }
-
-    const currentUser = user_id !== undefined && user_id !== null && user_id !== ''
-      ? user_id
-      : existingRows[0].user_id;
-
-    if (!isValidUUID(currentUser)) {
-      return res.status(400).json({
-        message: 'El user_id debe ser un UUID válido'
       });
     }
 
@@ -297,7 +279,7 @@ async function update(req, res, next) {
 
     const [categoryRows] = await pool.query(
       'SELECT id FROM categories WHERE id = ? AND user_id = ? AND deleted_at IS NULL',
-      [category_id, currentUser]
+      [category_id, userId]
     );
     if (categoryRows.length === 0) {
       return res.status(400).json({
@@ -325,7 +307,7 @@ async function update(req, res, next) {
 
       const [existingTags] = await pool.query(
         `SELECT id FROM tags WHERE id IN (${placeholders}) AND user_id = ? AND deleted_at IS NULL`,
-        [...tagIds, currentUser]
+        [...tagIds, userId]
       );
 
       if (existingTags.length !== tagIds.length) {
@@ -336,8 +318,8 @@ async function update(req, res, next) {
     }
 
     await pool.query(
-      'UPDATE tasks SET title = ?, description = ?, status = ?, category_id = ?, user_id = ? WHERE id = ? AND deleted_at IS NULL',
-      [String(title).trim(), normalizedDescription || null, statusValue, category_id, currentUser, id]
+      'UPDATE tasks SET title = ?, description = ?, status = ?, category_id = ?, user_id = ? WHERE id = ? AND user_id = ? AND deleted_at IS NULL',
+      [String(title).trim(), normalizedDescription || null, statusValue, category_id, userId, id, userId]
     );
 
     await pool.query('DELETE FROM tags_task WHERE task_id = ?', [id]);
@@ -347,7 +329,7 @@ async function update(req, res, next) {
       await pool.query('INSERT INTO tags_task (tag_id, task_id) VALUES ?', [values]);
     }
 
-    const task = await fetchTask(id);
+    const task = await fetchTask(id, userId);
 
     res.status(200).json({
       task
@@ -368,8 +350,8 @@ async function destroy(req, res, next) {
     }
 
     const [result] = await pool.query(
-      'UPDATE tasks SET deleted_at = NOW() WHERE id = ? AND deleted_at IS NULL',
-      [id]
+      'UPDATE tasks SET deleted_at = NOW() WHERE id = ? AND user_id = ? AND deleted_at IS NULL',
+      [id, req.user.id]
     );
 
     if (result.affectedRows === 0) {
