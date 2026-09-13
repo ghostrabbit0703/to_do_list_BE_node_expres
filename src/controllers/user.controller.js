@@ -2,10 +2,9 @@ import { randomUUID } from 'node:crypto';
 import bcrypt from 'bcrypt';
 import { pool } from '../db/connection.js';
 import { userDecorator } from '../decorators/user.decorator.js';
+import { isValidPassword } from '../utils/password.js';
 
 const SALT_ROUNDS = 10;
-const PASSWORD_MIN_LENGTH = 8;
-const PASSWORD_MAX_BYTES = 72;
 
 async function register(req, res, next) {
   try {
@@ -39,20 +38,8 @@ async function register(req, res, next) {
     }
 
     const normalizedPassword = String(password);
-    const hasUpperCase = /[A-Z]/.test(normalizedPassword);
-    const hasLowerCase = /[a-z]/.test(normalizedPassword);
-    const hasNumber = /\d/.test(normalizedPassword);
-    const hasSymbol = /[^A-Za-z0-9]/.test(normalizedPassword);
-    const passwordTooLong = Buffer.byteLength(normalizedPassword, 'utf8') > PASSWORD_MAX_BYTES;
 
-    if (
-      normalizedPassword.length < PASSWORD_MIN_LENGTH ||
-      passwordTooLong ||
-      !hasUpperCase ||
-      !hasLowerCase ||
-      !hasNumber ||
-      !hasSymbol
-    ) {
+    if (!isValidPassword(normalizedPassword)) {
       return res.status(400).json({
         success: false,
         error: 'Bad Request',
