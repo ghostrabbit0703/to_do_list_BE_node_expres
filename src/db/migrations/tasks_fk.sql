@@ -1,0 +1,1 @@
+ALTER TABLE tags_task ADD CONSTRAINT fk_tags_task_task FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE;

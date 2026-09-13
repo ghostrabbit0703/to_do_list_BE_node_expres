@@ -11,3 +11,10 @@ export const isValidName = (value, { min = 2, max = 100 } = {}) => {
   const trimmed = value.trim();
   return trimmed.length >= min && trimmed.length <= max;
 };
+
+export const isValidStatus = (value) => {
+  return (
+    typeof value === 'string' &&
+    ['pending', 'in_progress', 'completed'].includes(value)
+  );
+};
