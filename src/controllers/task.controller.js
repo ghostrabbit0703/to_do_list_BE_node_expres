@@ -2,23 +2,12 @@ import { randomUUID } from 'crypto';
 import { pool } from '../db/connection.js';
 import { taskDecorator } from '../decorators/task.decorator.js';
 import { getPaginationParams, buildPagination } from '../utils/pagination.js';
-import { isValidUUID, isValidName, isValidStatus } from '../utils/validation.js';
+import { isValidUUID, isValidName } from '../utils/validation.js';
+import { resolveTaskStatus } from '../utils/task.js';
 
 const TITLE_MIN_LENGTH = 1;
 const TITLE_MAX_LENGTH = 255;
 const DESCRIPTION_MAX_LENGTH = 1000;
-
-function resolveStatus({ status, completed }) {
-  if (status !== undefined && status !== null && status !== '') {
-    return isValidStatus(status) ? status : null;
-  }
-
-  if (typeof completed === 'boolean') {
-    return completed ? 'completed' : 'pending';
-  }
-
-  return 'pending';
-}
 
 async function fetchTask(taskId) {
   const [rows] = await pool.query(
@@ -58,52 +47,59 @@ async function index(req, res, next) {
       'SELECT COUNT(*) AS total FROM tasks WHERE deleted_at IS NULL'
     );
 
-    const [rows] = await pool.query(
-      `SELECT t.id, t.title, t.description, t.status, t.category_id, t.user_id, t.created_at, t.updated_at,
-              c.name AS category_name
-       FROM tasks t
-       JOIN categories c ON c.id = t.category_id AND c.deleted_at IS NULL
-       WHERE t.deleted_at IS NULL
-       ORDER BY t.created_at DESC
+    const [tasks] = await pool.query(
+      `SELECT id, title, description, status, category_id, user_id, created_at, updated_at
+       FROM tasks
+       WHERE deleted_at IS NULL
+       ORDER BY created_at DESC
        LIMIT ? OFFSET ?`,
       [perPage, offset]
     );
 
+    const categoryIds = [...new Set(tasks.map((task) => task.category_id))];
+    const categoriesById = new Map();
+
+    if (categoryIds.length > 0) {
+      const placeholders = categoryIds.map(() => '?').join(', ');
+
+      const [categoryRows] = await pool.query(
+        `SELECT id, name FROM categories WHERE id IN (${placeholders}) AND deleted_at IS NULL`,
+        categoryIds
+      );
+
+      for (const category of categoryRows) {
+        categoriesById.set(category.id, category);
+      }
+    }
+
     const tagsByTask = new Map();
 
-    if (rows.length > 0) {
-      const taskIds = rows.map((row) => row.id);
+    if (tasks.length > 0) {
+      const taskIds = tasks.map((task) => task.id);
       const placeholders = taskIds.map(() => '?').join(', ');
 
       const [tagRows] = await pool.query(
-        `SELECT t.id AS tag_id, t.name AS tag_name, tt.task_id
+        `SELECT tt.task_id, t.id, t.name
          FROM tags t
          JOIN tags_task tt ON tt.tag_id = t.id
          WHERE tt.task_id IN (${placeholders}) AND t.deleted_at IS NULL`,
         taskIds
       );
 
-      for (const row of rows) {
-        tagsByTask.set(row.id, []);
+      for (const task of tasks) {
+        tagsByTask.set(task.id, []);
       }
 
       for (const tagRow of tagRows) {
-        tagsByTask.get(tagRow.task_id).push({ id: tagRow.tag_id, name: tagRow.tag_name });
+        tagsByTask.get(tagRow.task_id).push({ id: tagRow.id, name: tagRow.name });
       }
     }
 
-    const data = rows.map((row) =>
+    const data = tasks.map((task) =>
       taskDecorator({
-        id: row.id,
-        title: row.title,
-        description: row.description,
-        status: row.status,
-        category_id: row.category_id,
-        user_id: row.user_id,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
-        category: row.category_name ? { id: row.category_id, name: row.category_name } : null,
-        tags: tagsByTask.get(row.id) || []
+        ...task,
+        category: categoriesById.get(task.category_id) || null,
+        tags: tagsByTask.get(task.id) || []
       })
     );
 
@@ -190,7 +186,7 @@ async function store(req, res, next) {
       });
     }
 
-    const statusValue = resolveStatus({ status, completed });
+    const statusValue = resolveTaskStatus({ status, completed });
     if (!statusValue) {
       return res.status(400).json({
         message: 'El estado debe ser pending, in_progress o completed'
@@ -305,7 +301,7 @@ async function update(req, res, next) {
       });
     }
 
-    const statusValue = resolveStatus({ status, completed });
+    const statusValue = resolveTaskStatus({ status, completed });
     if (!statusValue) {
       return res.status(400).json({
         message: 'El estado debe ser pending, in_progress o completed'
