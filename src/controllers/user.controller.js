@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import bcrypt from 'bcrypt';
 import { pool } from '../db/connection.js';
 import { userDecorator } from '../decorators/user.decorator.js';
+import { signToken } from '../utils/jwt.js';
 
 const SALT_ROUNDS = 10;
 const PASSWORD_MIN_LENGTH = 8;
@@ -87,4 +88,59 @@ async function register(req, res, next) {
   }
 }
 
-export { register };
+async function login(req, res, next) {
+  try {
+    const { email, password } = req.body || {};
+
+    if (!email || !password) {
+      return res.status(400).json({
+        message: 'Los campos email y password son obligatorios'
+      });
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    const [rows] = await pool.query(
+      'SELECT id, name, email, password, created_at FROM users WHERE email = ?',
+      [normalizedEmail]
+    );
+
+    const user = rows[0];
+
+    if (!user) {
+      return res.status(401).json({
+        message: 'Credenciales inválidas'
+      });
+    }
+
+    const isValidPassword = await bcrypt.compare(String(password), user.password);
+
+    if (!isValidPassword) {
+      return res.status(401).json({
+        message: 'Credenciales inválidas'
+      });
+    }
+
+    const token = signToken(user);
+
+    res.status(200).json({
+      message: 'Sesión iniciada correctamente',
+      token,
+      user: userDecorator(user)
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function logout(req, res, next) {
+  try {
+    res.status(200).json({
+      message: 'Sesión cerrada correctamente'
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export { register, login, logout };

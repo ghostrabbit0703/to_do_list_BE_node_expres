@@ -1,0 +1,15 @@
+import jwt from 'jsonwebtoken';
+
+const DEFAULT_EXPIRES_IN = '12h';
+
+export function signToken(user) {
+  if (!process.env.JWT_SECRET) {
+    throw new Error('Falta JWT_SECRET en el archivo .env');
+  }
+
+  return jwt.sign(
+    { sub: user.id, email: user.email },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN || DEFAULT_EXPIRES_IN }
+  );
+}
